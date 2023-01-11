@@ -5,25 +5,17 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	tgbotapi "github.com/Syfaro/telegram-bot-api"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
+	"regexp"
+	"strings"
 	"time"
-
-	tgbotapi "github.com/Syfaro/telegram-bot-api"
 )
-
-//
-//Site list map  "URL" - status
-//Site status
-//0 - never checked
-//1 - timeout
-//2 - SSL expiring
-//200 - ok
-//other statuses - crit
 
 var (
 	SiteList              map[string]int
@@ -32,7 +24,7 @@ var (
 	telegramBotToken      string
 	configFile            string
 	pprofListen           string
-	HelpMsg               = "Это простой мониторинг доступности сайтов. Он обходит сайты в списке и ждет что он ответит 200, если возвращается не 200 или ошибки подключения, то бот пришлет уведомления в групповой чат\n" +
+	HelpMsg               = "Это простой мониторинг доступности сайтов. Он обходит сайты в списке и ждет что он ответит 200, если возвращается не 200 или ошибки подключения, то бот пришлет уведомления в чат\n" +
 		"Список доступных комманд:\n" +
 		"/site_list - покажет список сайтов в мониторинге и их статусы (про статусы ниже)\n" +
 		"/site_add [url] - добавит url в список мониторинга\n" +
@@ -52,7 +44,7 @@ func init() {
 	flag.StringVar(&configFile, "config", "config.json", "config file")
 	flag.StringVar(&pprofListen, "pprofListen", ":6060", "Pprof listen interface")
 	flag.StringVar(&telegramBotToken, "telegrambottoken", "", "Telegram Bot Token")
-	flag.Int64Var(&chatID, "chatid", 0, "chatId to send messages")
+	flag.Int64Var(&chatID, "chatid", 79039545, "chatId to send messages")
 	flag.Int64Var(&sslDaysToExipireAlert, "sslDaysToExipireAlert", 10, "SSL certificate expiration threshold")
 
 	flag.Parse()
@@ -162,6 +154,7 @@ func main() {
 	log.Printf("Pprof interface: %s", pprofListen)
 
 	bot, err := tgbotapi.NewBotAPI(telegramBotToken)
+	bot.Debug = true
 	if err != nil {
 		log.Panic(err)
 	}
@@ -201,9 +194,51 @@ func main() {
 			reply = "Site deleted from monitoring list"
 		case "help":
 			reply = HelpMsg
+		case "load_data":
+			reply = testdata(update.Message.CommandArguments())
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, reply)
 		bot.Send(msg)
 	}
+
+}
+
+func testdata(url string) string {
+	// Страница с которой хотим взять данные для теста
+
+	// Регулярки для выборки
+	var pcard = regexp.MustCompile(`data-url="(\/p\/.*)"`)
+	var pcode = regexp.MustCompile(`code=(.*)" `)
+	// Создаем переменные
+	var products strings.Builder
+	var tocart strings.Builder
+
+	// Получаем код страницы, сохраняем в переменную
+	var client http.Client
+	resp, err := client.Get(url)
+	defer resp.Body.Close()
+	if err != nil {
+		fmt.Print(err)
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyString := string(bodyBytes)
+
+	// Выборка ссылки на карточку товара
+	for i, match := range pcard.FindAllString(bodyString, -1) {
+		products.WriteString(strings.ReplaceAll((strings.ReplaceAll(match, "data-url=\"", "")), "\"", "\n"))
+		if i < 0 {
+			print(i)
+		}
+	}
+
+	// Выборка коды товаров для добавления в корзину
+	for i, match := range pcode.FindAllString(bodyString, -1) {
+		tocart.WriteString(strings.ReplaceAll((strings.ReplaceAll(match, "code=", "\n")), "\"", ""))
+		if i < 0 {
+			print(i)
+		}
+	}
+	result := products.String() + "\n----\n" + tocart.String()
+	return result
 }
