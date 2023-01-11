@@ -186,16 +186,30 @@ func main() {
 			reply = string(sl)
 
 		case "site_add":
-			SiteList[update.Message.CommandArguments()] = 0
-			reply = "Site added to monitoring list"
+			if update.Message.CommandArguments() != "" {
+				SiteList[update.Message.CommandArguments()] = 0
+				reply = "Site added to monitoring list"
+			} else {
+				reply = "Url is required"
+			}
 
 		case "site_del":
-			delete(SiteList, update.Message.CommandArguments())
-			reply = "Site deleted from monitoring list"
+			if update.Message.CommandArguments() != "" {
+				delete(SiteList, update.Message.CommandArguments())
+				reply = "Site deleted from monitoring list"
+			} else {
+				reply = "Url is required"
+			}
+
 		case "help":
 			reply = HelpMsg
+
 		case "load_data":
-			reply = testdata(update.Message.CommandArguments())
+			if update.Message.CommandArguments() != "" {
+				reply = testdata(update.Message.CommandArguments())
+			} else {
+				reply = "Url is required"
+			}
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, reply)
@@ -214,12 +228,27 @@ func testdata(url string) string {
 	var products strings.Builder
 	var tocart strings.Builder
 
+	//добавляем https, если его не было, http не нужен, поэтому его в расчет не берем
+	if !strings.Contains(url, "https://") {
+		url = "https://" + url
+	}
+
 	// Получаем код страницы, сохраняем в переменную
-	var client http.Client
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	var client = &http.Client{
+		Timeout:   time.Second * 10,
+		Transport: tr,
+	}
+
 	resp, err := client.Get(url)
-	defer resp.Body.Close()
+
 	if err != nil {
 		fmt.Print(err)
+	} else {
+		defer resp.Body.Close()
 	}
 	bodyBytes, err := io.ReadAll(resp.Body)
 	bodyString := string(bodyBytes)
