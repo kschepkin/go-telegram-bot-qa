@@ -13,11 +13,13 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var (
+	sum                   float32
 	SiteList              map[string]int
 	chatID                int64
 	sslDaysToExipireAlert int64
@@ -36,7 +38,10 @@ var (
 		"1 - ошибка подключения \n" +
 		"2 - истекает сертификат \n" +
 		"200 - ОК-статус" +
-		"все остальные http-коды считаются некорректными"
+		"все остальные http-коды считаются некорректными\n" +
+		"Помимо прочего бот умеет считать выплаты за работу в выходные и собирать тестовые данные: \n" +
+		"/holidays [ЗП] [отработано дней]- вернет в ответ примерную сумму выплаты\n" +
+		"/load_data [url] - принимает ссылку на листинг, в ответ выдает готовый список страниц для НТ и SKU для добавления в корзину"
 )
 
 func init() {
@@ -154,7 +159,7 @@ func main() {
 	log.Printf("Pprof interface: %s", pprofListen)
 
 	bot, err := tgbotapi.NewBotAPI(telegramBotToken)
-	bot.Debug = true
+	bot.Debug = false
 	if err != nil {
 		log.Panic(err)
 	}
@@ -186,29 +191,47 @@ func main() {
 			reply = string(sl)
 
 		case "site_add":
+			reply = "Url is required"
 			if update.Message.CommandArguments() != "" {
 				SiteList[update.Message.CommandArguments()] = 0
 				reply = "Site added to monitoring list"
-			} else {
-				reply = "Url is required"
 			}
 
 		case "site_del":
+			reply = "Url is required"
 			if update.Message.CommandArguments() != "" {
 				delete(SiteList, update.Message.CommandArguments())
 				reply = "Site deleted from monitoring list"
-			} else {
-				reply = "Url is required"
 			}
 
 		case "help":
 			reply = HelpMsg
 
 		case "load_data":
+			reply = "Url is required"
 			if update.Message.CommandArguments() != "" {
 				reply = testdata(update.Message.CommandArguments())
-			} else {
-				reply = "Url is required"
+			}
+
+		case "holidays":
+			reply = "Arguments is required:\n З/П - отработано в выхи"
+			if strings.Contains(update.Message.CommandArguments(), " ") {
+				args := strings.Split(update.Message.CommandArguments(), " ")
+				// string to int
+				if len(args) >= 2 {
+					zp, err := strconv.ParseFloat(args[0], 32)
+					od, err := strconv.ParseFloat(args[1], 32)
+					if err != nil {
+						// ... handle error
+						print(err)
+					}
+
+					sum = float32((zp / 21) * od * 1.8)
+
+					log.Printf("Sum = ", sum)
+
+					reply = "Сумма: " + strconv.Itoa(int(sum))
+				}
 			}
 		}
 
