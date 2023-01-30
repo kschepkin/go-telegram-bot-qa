@@ -262,7 +262,7 @@ func testdata(url string) string {
 	}
 
 	var client = &http.Client{
-		Timeout:   time.Second * 10,
+		Timeout:   time.Second * 100,
 		Transport: tr,
 	}
 
